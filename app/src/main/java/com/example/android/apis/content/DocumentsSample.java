@@ -16,6 +16,7 @@
 
 package com.example.android.apis.content;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -51,6 +52,27 @@ public class DocumentsSample extends Activity {
     private static final int CODE_RENAME = 45;
 
     private TextView mResult;
+
+    public static byte[] readFullyNoClose(InputStream in) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int count;
+        while ((count = in.read(buffer)) != -1) {
+            bytes.write(buffer, 0, count);
+        }
+        return bytes.toByteArray();
+    }
+
+    public static void closeQuietly(AutoCloseable closeable) {
+        if (closeable != null) {
+            try {
+                closeable.close();
+            } catch (RuntimeException rethrown) {
+                throw rethrown;
+            } catch (Exception ignored) {
+            }
+        }
+    }
 
     @Override
     public void onCreate(Bundle icicle) {
@@ -137,8 +159,8 @@ public class DocumentsSample extends Activity {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
-                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
-                        "text/plain", "application/msword" });
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                        "text/plain", "application/msword"});
                 if (multiple.isChecked()) {
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
                 }
@@ -236,111 +258,116 @@ public class DocumentsSample extends Activity {
         setContentView(scroll);
     }
 
+    @SuppressLint("NewApi")
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         final ContentResolver cr = getContentResolver();
+        try {
+            clearLog();
 
-        clearLog();
+            log("resultCode=" + resultCode);
+            log("data=" + String.valueOf(data));
 
-        log("resultCode=" + resultCode);
-        log("data=" + String.valueOf(data));
-
-        final Uri uri = data != null ? data.getData() : null;
-        if (uri != null) {
-            log("isDocumentUri=" + DocumentsContract.isDocumentUri(this, uri));
-        } else {
-            log("missing URI?");
-            return;
-        }
-
-        if (requestCode == CODE_READ) {
-            try {
-                cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } catch (SecurityException e) {
-                log("FAILED TO TAKE PERMISSION", e);
-            }
-            InputStream is = null;
-            try {
-                is = cr.openInputStream(uri);
-                log("read length=" + readFullyNoClose(is).length);
-            } catch (Exception e) {
-                log("FAILED TO READ", e);
-            } finally {
-                closeQuietly(is);
-            }
-        } else if (requestCode == CODE_WRITE) {
-            try {
-                cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            } catch (SecurityException e) {
-                log("FAILED TO TAKE PERMISSION", e);
-            }
-            OutputStream os = null;
-            try {
-                os = cr.openOutputStream(uri);
-                os.write("THE COMPLETE WORKS OF SHAKESPEARE".getBytes());
-                log("wrote data");
-            } catch (Exception e) {
-                log("FAILED TO WRITE", e);
-            } finally {
-                closeQuietly(os);
-            }
-        } else if (requestCode == CODE_TREE) {
-            // Find existing docs
-            Uri doc = DocumentsContract.buildDocumentUriUsingTree(uri,
-                    DocumentsContract.getTreeDocumentId(uri));
-            Uri child = DocumentsContract.buildChildDocumentsUriUsingTree(uri,
-                    DocumentsContract.getTreeDocumentId(uri));
-            Cursor c = cr.query(child, new String[] {
-                    Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE }, null, null, null);
-            try {
-                while (c.moveToNext()) {
-                    log("found child=" + c.getString(0) + ", mime=" + c.getString(1));
-                }
-            } finally {
-                closeQuietly(c);
-            }
-
-            // Create some documents
-            Uri pic = DocumentsContract.createDocument(cr, doc, "image/png", "pic.png");
-            Uri dir = DocumentsContract.createDocument(cr, doc, Document.MIME_TYPE_DIR, "my dir");
-            Uri dirPic = DocumentsContract.createDocument(cr, dir, "image/png", "pic2.png");
-
-            log("created " + pic);
-            log("created " + dir);
-            log("created " + dirPic);
-
-            // Write to one of them
-            OutputStream os = null;
-            try {
-                os = cr.openOutputStream(dirPic);
-                os.write("THE COMPLETE WORKS OF SHAKESPEARE".getBytes());
-                log("wrote data");
-            } catch (Exception e) {
-                log("FAILED TO WRITE", e);
-            } finally {
-                closeQuietly(os);
-            }
-
-            // And delete the first pic
-            if (DocumentsContract.deleteDocument(cr, pic)) {
-                log("deleted untouched pic");
+            final Uri uri = data != null ? data.getData() : null;
+            if (uri != null) {
+                log("isDocumentUri=" + DocumentsContract.isDocumentUri(this, uri));
             } else {
-                log("FAILED TO DELETE PIC");
+                log("missing URI?");
+                return;
             }
-        } else if (requestCode == CODE_RENAME) {
-            final Uri newUri = DocumentsContract.renameDocument(cr, uri, "MEOW.TEST");
-            log("rename result=" + newUri);
 
-            InputStream is = null;
-            try {
-                is = cr.openInputStream(newUri);
-                log("read length=" + readFullyNoClose(is).length);
-            } catch (Exception e) {
-                log("FAILED TO READ", e);
-            } finally {
-                closeQuietly(is);
+            if (requestCode == CODE_READ) {
+                try {
+                    cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (SecurityException e) {
+                    log("FAILED TO TAKE PERMISSION", e);
+                }
+                InputStream is = null;
+                try {
+                    is = cr.openInputStream(uri);
+                    log("read length=" + readFullyNoClose(is).length);
+                } catch (Exception e) {
+                    log("FAILED TO READ", e);
+                } finally {
+                    closeQuietly(is);
+                }
+            } else if (requestCode == CODE_WRITE) {
+                try {
+                    cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                } catch (SecurityException e) {
+                    log("FAILED TO TAKE PERMISSION", e);
+                }
+                OutputStream os = null;
+                try {
+                    os = cr.openOutputStream(uri);
+                    os.write("THE COMPLETE WORKS OF SHAKESPEARE".getBytes());
+                    log("wrote data");
+                } catch (Exception e) {
+                    log("FAILED TO WRITE", e);
+                } finally {
+                    closeQuietly(os);
+                }
+            } else if (requestCode == CODE_TREE) {
+                // Find existing docs
+                Uri doc = DocumentsContract.buildDocumentUriUsingTree(uri,
+                        DocumentsContract.getTreeDocumentId(uri));
+                Uri child = DocumentsContract.buildChildDocumentsUriUsingTree(uri,
+                        DocumentsContract.getTreeDocumentId(uri));
+                Cursor c = cr.query(child, new String[]{
+                        Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE}, null, null, null);
+                try {
+                    while (c.moveToNext()) {
+                        log("found child=" + c.getString(0) + ", mime=" + c.getString(1));
+                    }
+                } finally {
+                    closeQuietly(c);
+                }
+
+                // Create some documents
+                Uri pic = DocumentsContract.createDocument(cr, doc, "image/png", "pic.png");
+                Uri dir = DocumentsContract.createDocument(cr, doc, Document.MIME_TYPE_DIR, "my dir");
+                Uri dirPic = DocumentsContract.createDocument(cr, dir, "image/png", "pic2.png");
+
+                log("created " + pic);
+                log("created " + dir);
+                log("created " + dirPic);
+
+                // Write to one of them
+                OutputStream os = null;
+                try {
+                    os = cr.openOutputStream(dirPic);
+                    os.write("THE COMPLETE WORKS OF SHAKESPEARE".getBytes());
+                    log("wrote data");
+                } catch (Exception e) {
+                    log("FAILED TO WRITE", e);
+                } finally {
+                    closeQuietly(os);
+                }
+
+                // And delete the first pic
+                if (DocumentsContract.deleteDocument(cr, pic)) {
+                    log("deleted untouched pic");
+                } else {
+                    log("FAILED TO DELETE PIC");
+                }
+            } else if (requestCode == CODE_RENAME) {
+                final Uri newUri = DocumentsContract.renameDocument(cr, uri, "MEOW.TEST");
+                log("rename result=" + newUri);
+
+                InputStream is = null;
+                try {
+                    is = cr.openInputStream(newUri);
+                    log("read length=" + readFullyNoClose(is).length);
+                } catch (Exception e) {
+                    log("FAILED TO READ", e);
+                } finally {
+                    closeQuietly(is);
+                }
             }
+        } catch (Exception e) {
+
         }
+
     }
 
     private void clearLog() {
@@ -354,26 +381,5 @@ public class DocumentsSample extends Activity {
     private void log(String msg, Throwable t) {
         Log.d(TAG, msg, t);
         mResult.setText(mResult.getText() + "\n" + msg);
-    }
-
-    public static byte[] readFullyNoClose(InputStream in) throws IOException {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        byte[] buffer = new byte[1024];
-        int count;
-        while ((count = in.read(buffer)) != -1) {
-            bytes.write(buffer, 0, count);
-        }
-        return bytes.toByteArray();
-    }
-
-    public static void closeQuietly(AutoCloseable closeable) {
-        if (closeable != null) {
-            try {
-                closeable.close();
-            } catch (RuntimeException rethrown) {
-                throw rethrown;
-            } catch (Exception ignored) {
-            }
-        }
     }
 }
